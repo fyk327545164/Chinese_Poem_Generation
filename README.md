@@ -4,9 +4,9 @@ This is a base-line model to generate a Chinese poem with the input of a user-de
 
 ## Requirement:
 
--- Python 3.7
+* Python 3.7
 
--- TensorFlow 1.13
+* TensorFlow 1.13
 
 ## Model Structure
 
