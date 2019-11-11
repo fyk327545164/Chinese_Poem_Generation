@@ -20,7 +20,7 @@ Several Encoder-Decoder are built to be trained:
 * sent1-encoder --> sent2-decoder:  
 --- with attention to sent1-output  
 --- multi-layer-LSTM applied
-* sent1-encoder+sent2-encoder --> sent3-decoder
+* sent1-encoder+sent2-encoder --> sent3-decoder  
 --- with attention to title-output    
 --- multi-layer-LSTM applied
   
