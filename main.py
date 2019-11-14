@@ -3,9 +3,9 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-import numpy as np
-from preprocess import build_data_files, build_input_batch, build_input_data
+from preprocess import *
 from model import Model
+from transformer import Transformer
 import configuration
 import time
 import os
@@ -107,6 +107,55 @@ def main():
             writer.close()
 
 
+def trian_eval_transformer():
+
+    data_files = build_data_files()
+
+    print("Building input data...")
+    title2sent, sent2sent, sent2next, vocab_size = build_input_data(data_files)
+
+    np.random.shuffle(title2sent)
+    np.random.shuffle(sent2sent)
+    np.random.shuffle(sent2next)
+
+    train_title2sent = title2sent
+    train_sent2sent = sent2sent
+    train_sent2next = sent2next
+
+    with tf.Graph().as_default():
+
+        if True:
+            print("Building model...")
+            model = Transformer(vocab_size)
+            model.build()
+
+            train_op = tf.train.AdamOptimizer().minimize(model.loss)
+
+            with tf.Session() as sess:
+
+                sess.run(tf.global_variables_initializer())
+                sess.run(tf.tables_initializer())
+
+                step = 0
+
+                print("Begin Training")
+                while step <= 20000:
+
+                    start_time = time.time()
+
+                    feed_train, train_title2sent, train_sent2sent, train_sent2next = build_transformer_batch(
+                        train_title2sent, train_sent2sent, train_sent2next, 64, model)
+
+                    sess.run(train_op, feed_dict=feed_train)
+                    loss = sess.run(model.loss, feed_dict=feed_train)
+
+                    end_time = time.time()
+                    print("After " + str(step) + " steps: training loss is " + str(round(loss, 5)) + "---" +
+                          str(round(end_time - start_time, 2)) + "s/step")
+
+                    step += 1
+
+
 def run_eval(eval_title2sent, eval_sent2sent, eval_sent2next, batch_size, model, sess):
     losses = 0.
     weights = 0.
@@ -142,4 +191,6 @@ def run_eval(eval_title2sent, eval_sent2sent, eval_sent2next, batch_size, model,
     return perplexity, eval_loss
 
 
-main()
+if __name__ == '__main__':
+    # main()
+    trian_eval_transformer()
