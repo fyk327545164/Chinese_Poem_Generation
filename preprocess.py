@@ -4,19 +4,7 @@ from __future__ import print_function
 
 from langconv import *
 import json
-import random
-
-
-# def check_vocab(sent, vocab):
-#
-#     sent_arr = []
-#     for c in sent:
-#         if not vocab.HasWord(c):
-#             vocab.word2id[c] = vocab.nextID
-#             vocab.id2word[vocab.nextID] = c
-#             vocab.nextID += 1
-#         sent_arr.append(vocab.GetID(c))
-#     return sent_arr
+import numpy as np
 
 
 def build_data_files():
@@ -49,7 +37,6 @@ def build_input_data(data_files):
     sent2next = []
 
     vocab = ['<start>', '<end>', '<pad>']
-    spe_c = ' 1234567890`~!@#$%^&*()_+-=[]\{}|;:,./<>?[]{}·”…□○●、。《》「」『』〖〗'
 
     for file in data_files:
         file = 'data/' + file
@@ -74,10 +61,8 @@ def build_input_data(data_files):
                     if c not in vocab:
                         vocab.append(c)
                     title_s.append(c)
-                # title = check_vocab(title, vocab)
 
                 sent = Converter('zh-hans').convert(s['paragraphs'][0][:5])
-                # sent = check_vocab(sent, vocab)
                 sent_s = []
                 for c in sent:
                     if c not in vocab:
@@ -89,14 +74,12 @@ def build_input_data(data_files):
                 title2sent.append([title_s, sent_start, sent_end])
                 for i in range(num_sents-1):
                     sent1 = Converter('zh-hans').convert(s['paragraphs'][i][:5])
-                    # sent1 = check_vocab(sent1, vocab)
                     sent1_s = []
                     for c in sent1:
                         if c not in vocab:
                             vocab.append(c)
                         sent1_s.append(c)
                     if len(sent1_s) != 5:
-                        print("ssssssssssssssssssssssssssssssssssssss")
                         continue
                     sent2 = Converter('zh-hans').convert(s['paragraphs'][i][5+1:-1])
                     # sent2 = check_vocab(sent2, vocab)
@@ -106,17 +89,14 @@ def build_input_data(data_files):
                             vocab.append(c)
                         sent2_s.append(c)
                     if len(sent2_s) != 5:
-                        print("ssssssssssssssssssssssssssssssssssssss")
                         continue
                     sent3 = Converter('zh-hans').convert(s['paragraphs'][i+1][:5])
-                    # sent3 = check_vocab(sent3, vocab)
                     sent3_s = []
                     for c in sent3:
                         if c not in vocab:
                             vocab.append(c)
                         sent3_s.append(c)
                     if len(sent3_s) != 5:
-                        print("ssssssssssssssssssssssssssssssssssssss")
                         continue
 
                     sent2_start = ['<start>'] + sent2_s[:]
@@ -129,14 +109,12 @@ def build_input_data(data_files):
                     sent2next.append([title_s, sent1_s, sent2_s, sent3_start, sent3_end])
 
                 sent1 = Converter('zh-hans').convert(s['paragraphs'][num_sents-1][:5])
-                # sent1 = check_vocab(sent1, vocab)
                 sent1_s = []
                 for c in sent1:
                     if c not in vocab:
                         vocab.append(c)
                     sent1_s.append(c)
                 sent2 = Converter('zh-hans').convert(s['paragraphs'][num_sents-1][5+1:-1])
-                # sent2 = check_vocab(sent2, vocab)
                 sent2_s = []
                 for c in sent2:
                     if c not in vocab:
@@ -153,39 +131,6 @@ def build_input_data(data_files):
             f.write(word + '\n')
 
     return title2sent, sent2sent, sent2next, len(vocab)
-
-
-def build_embedding_map(embedding_file, vocab_file):
-    """
-    Create the embedding map
-
-    Return:
-        Embedding map for words in the vocabulary file
-        - Random Normal for unknown words
-        - [0...] for <pad>
-    """
-
-    words_dic = {}
-
-    with open(embedding_file, 'r') as f:
-        lines = f.readlines()
-        for line in lines:
-            elements = line.split()
-            embedding = []
-            for ele in elements[1:]:
-                embedding.append(float(ele))
-            words_dic[elements[0]] = embedding
-
-    embedding_map = []
-    with open(vocab_file, 'r') as f:
-        lines = f.readlines()
-        for word in lines:
-            if word[:1] in words_dic:
-                embedding_map.append(words_dic[word[:-1]])
-            else:
-                embedding_map.append([random.uniform(-1.0, 1.0) for _ in range(300)])
-        embedding_map.append([random.uniform(-1.0, 1.0) for _ in range(300)])
-    return embedding_map
 
 
 def build_input_batch(title2sent, sent2sent, sent2next, batch_size, model):
@@ -265,3 +210,72 @@ def build_input_batch(title2sent, sent2sent, sent2next, batch_size, model):
             model.sent2next_sent3_target_holder: sent2next_sent3_target,
             model.sent2next_title_length: sent2next_title_length
             }, title2sent, sent2sent, sent2next
+
+
+def build_transformer_batch(title2sent, sent2sent, sent2next, batch_size, model):
+
+    title2sent_title = []
+    title2sent_sent = []
+    title2sent_sent_target = []
+    title2sent_input_mask = []
+
+    sent2sent_sent1 = []
+    sent2sent_sent2 = []
+    sent2sent_sent2_target = []
+
+    sent2next_sent = []
+    sent2next_sent3 = []
+    sent2next_sent3_target = []
+
+    for i in range(batch_size):
+        title, start_sent, end_sent = title2sent.pop(0)
+        if len(title) >= 10:
+            title2sent_title.append(title[:10])
+            title2sent_input_mask.append([512 for _ in range(10)])
+        else:
+            t = title[:]
+            t_mask = [512 for _ in range(len(title))]
+            for _ in range(10 - len(title)):
+                t.append('<pad>')
+                t_mask.append(0)
+            title2sent_title.append(t)
+            title2sent_input_mask.append(t_mask)
+        title2sent_sent.append(start_sent[1:])
+        title2sent_sent_target.append(end_sent[:-1])
+        title2sent.append([title, start_sent, end_sent])
+
+        title1, sent1, start_sent2, end_sent2 = sent2sent.pop(0)
+        sent2sent_sent1.append(sent1[:])
+        sent2sent_sent2.append(start_sent2[1:])
+        sent2sent_sent2_target.append(end_sent2[:-1])
+        sent2sent.append([title1, sent1, start_sent2, end_sent2])
+
+        title2, sent1, sent2, start_sent3, end_sent3 = sent2next.pop(0)
+        sent2next_sent.append(sent1[:]+sent2[:])
+        sent2next_sent3.append(start_sent3[1:])
+        sent2next_sent3_target.append(end_sent3[:-1])
+        sent2next.append([title2, sent1, sent2, start_sent3, end_sent3])
+
+    title2sent_output_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
+    sent2sent_input_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
+    sent2sent_output_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
+    sent2next_input_mask = [[512 for _ in range(10)] for batch in range(batch_size)]
+    sent2next_output_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
+
+    return {
+        model.title2sent_title_holder: np.array(title2sent_title),
+        model.title2sent_sent_holder: np.array(title2sent_sent),
+        model.title2sent_sent_target_holder: np.array(title2sent_sent_target),
+        model.title2sent_input_mask_holder: np.array(title2sent_input_mask),
+        model.title2sent_output_mask_holder: np.array(title2sent_output_mask),
+        model.sent2sent_sent1_holder: np.array(sent2sent_sent1),
+        model.sent2sent_sent2_holder: np.array(sent2sent_sent2),
+        model.sent2sent_sent2_target_holder: np.array(sent2sent_sent2_target),
+        model.sent2sent_input_mask_holder: np.array(sent2sent_input_mask),
+        model.sent2sent_output_mask_holder: np.array(sent2sent_output_mask),
+        model.sent2next_sent_holder: np.array(sent2next_sent),
+        model.sent2next_sent3_holder: np.array(sent2next_sent3),
+        model.sent2next_sent3_target_holder: np.array(sent2next_sent3_target),
+        model.sent2next_input_mask_holder: np.array(sent2next_input_mask),
+        model.sent2next_output_mask_holder: np.array(sent2next_output_mask)}, title2sent, sent2sent, sent2next
+
