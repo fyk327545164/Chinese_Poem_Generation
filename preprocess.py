@@ -11,7 +11,7 @@ def build_data_files():
 
     file_names = ["poet.tang.0.json"]
 
-    for i in range(1, 58):
+    for i in range(1, 3):
         file = "poet.tang." + str(i) + "000.json"
         file_names.append(file)
 

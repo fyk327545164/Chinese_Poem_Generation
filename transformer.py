@@ -17,11 +17,13 @@ class Configuration:
 
 
 class Transformer:
-    def __init__(self, vocab_size, config=Configuration()):
+    def __init__(self, vocab_size, config=Configuration(), mode='train'):
 
         self.config = config
 
         self.vocab_size = vocab_size
+
+        self.mode = mode
 
         self.vocab = tf.contrib.lookup.index_table_from_file('model/vocab.txt', num_oov_buckets=1)
 
@@ -68,7 +70,17 @@ class Transformer:
 
         self.out = None
 
-        self.loss = None
+        self.cross_entropy_loss = None
+
+        self.total_loss = None
+
+        self.merge_summary = None
+
+        self.eval_loss = tf.placeholder(tf.float32)
+
+        self.perplexity = tf.placeholder(tf.float32)
+
+        self.eval_summary = None
 
         def build_positional_encoding(length):
             encoding = np.array([
@@ -82,6 +94,8 @@ class Transformer:
 
         self.positional_encoding_10 = build_positional_encoding(10)
         self.positional_encoding_5 = build_positional_encoding(5)
+
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
     def build_embedding(self):
 
@@ -204,37 +218,60 @@ class Transformer:
         sent2sent_dense = tf.layers.Dense(self.vocab_size, name="dense_sent2sent")
         sent2next_dense = tf.layers.Dense(self.vocab_size, name="dense_sent2next")
 
-        title2sent_encoder_output = self.build_encoder_layer('title2sent',
-                                                             self.title2sent_title,
-                                                             self.title2sent_input_mask)
-        title2sent_out = self.build_decoder_layer(title2sent_encoder_output,
-                                                  'title2sent',
-                                                  self.title2sent_sent,
-                                                  self.title2sent_output_mask)
-        title2sent_out = tf.nn.softmax(title2sent_dense(title2sent_out))
+        if self.mode == 'train':
 
-        sent2sent_encoder_output = self.build_encoder_layer('sent2sent',
-                                                            self.sent2sent_sent1,
-                                                            self.sent2sent_input_mask)
-        sent2sent_out = self.build_decoder_layer(sent2sent_encoder_output,
-                                                 'sent2sent',
-                                                 self.sent2sent_sent2,
-                                                 self.sent2sent_output_mask)
-        sent2sent_out = tf.nn.softmax(sent2sent_dense(sent2sent_out))
+            title2sent_encoder_output = self.build_encoder_layer('title2sent',
+                                                                 self.title2sent_title,
+                                                                 self.title2sent_input_mask)
+            title2sent_out = self.build_decoder_layer(title2sent_encoder_output,
+                                                      'title2sent',
+                                                      self.title2sent_sent,
+                                                      self.title2sent_output_mask)
+            title2sent_out = tf.nn.softmax(title2sent_dense(title2sent_out))
 
-        sent2next_encoder_output = self.build_encoder_layer('sent2next',
-                                                            self.sent2next_sent,
-                                                            self.sent2next_input_mask)
-        sent2next_out = self.build_decoder_layer(sent2next_encoder_output,
-                                                 'sent2next',
-                                                 self.sent2next_sent3,
-                                                 self.sent2next_output_mask)
-        sent2next_out = tf.nn.softmax(sent2next_dense(sent2next_out))
+            sent2sent_encoder_output = self.build_encoder_layer('sent2sent',
+                                                                self.sent2sent_sent1,
+                                                                self.sent2sent_input_mask)
+            sent2sent_out = self.build_decoder_layer(sent2sent_encoder_output,
+                                                     'sent2sent',
+                                                     self.sent2sent_sent2,
+                                                     self.sent2sent_output_mask)
+            sent2sent_out = tf.nn.softmax(sent2sent_dense(sent2sent_out))
 
-        title2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.title2sent_sent_target,
-                                                                           logits=title2sent_out)
-        sent2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sent2sent_sent2_target,
-                                                                          logits=sent2sent_out)
-        sent2next_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sent2next_sent3_target,
-                                                                          logits=sent2next_out)
-        self.loss = tf.reduce_mean(title2sent_losses)+tf.reduce_mean(sent2sent_losses)+tf.reduce_mean(sent2next_losses)
+            sent2next_encoder_output = self.build_encoder_layer('sent2next',
+                                                                self.sent2next_sent,
+                                                                self.sent2next_input_mask)
+            sent2next_out = self.build_decoder_layer(sent2next_encoder_output,
+                                                     'sent2next',
+                                                     self.sent2next_sent3,
+                                                     self.sent2next_output_mask)
+            sent2next_out = tf.nn.softmax(sent2next_dense(sent2next_out))
+
+            title2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.title2sent_sent_target,
+                                                                               logits=title2sent_out)
+            sent2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sent2sent_sent2_target,
+                                                                              logits=sent2sent_out)
+            sent2next_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sent2next_sent3_target,
+                                                                              logits=sent2next_out)
+            self.cross_entropy_loss = [title2sent_losses, sent2sent_losses, sent2next_losses]
+
+            title2sent_loss = tf.reduce_mean(title2sent_losses)
+            sent2sent_loss = tf.reduce_mean(sent2sent_losses)
+            sent2next_loss = tf.reduce_mean(sent2next_losses)
+
+            self.total_loss = title2sent_loss + sent2sent_loss + sent2next_loss
+
+            summary_loss = tf.summary.scalar("loss", self.total_loss)
+            summary_title2sent_loss = tf.summary.scalar("title2sent_loss", title2sent_loss)
+            summary_sent2sent_loss = tf.summary.scalar("sent2sent_loss", sent2sent_loss)
+            summary_sent2next_loss = tf.summary.scalar("sent2next_loss", sent2next_loss)
+
+            self.merge_summary = tf.summary.merge([summary_loss,
+                                                   summary_title2sent_loss,
+                                                   summary_sent2sent_loss,
+                                                   summary_sent2next_loss])
+
+            summary_eval_loss = tf.summary.scalar("eval_loss", self.eval_loss)
+            summary_eval_perplexity = tf.summary.scalar("eval_perplexity", self.perplexity)
+
+            self.eval_summary = tf.summary.merge([summary_eval_loss, summary_eval_perplexity])

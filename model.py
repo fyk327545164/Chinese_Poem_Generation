@@ -66,7 +66,7 @@ class Model(object):
         else:
             self.sent_length = [5 for _ in range(self.config.batch_size)]
 
-        self.output = None
+        self.out = None
 
         self.total_loss = None
 
@@ -112,10 +112,10 @@ class Model(object):
 
             if bidirection:
 
-                fw_encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=self.config.num_lstm_units,
-                                                               trainable=trainable)
-                bw_encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units=self.config.num_lstm_units,
-                                                               trainable=trainable)
+                fw_encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(
+                    num_units=self.config.num_lstm_units, trainable=trainable)
+                bw_encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(
+                    num_units=self.config.num_lstm_units, trainable=trainable)
 
                 if dropout:
                     fw_encoder_cell = tf.nn.rnn_cell.DropoutWrapper(fw_encoder_cell,
@@ -125,16 +125,12 @@ class Model(object):
                                                                     input_keep_prob=self.config.dropout_prob,
                                                                     output_keep_prob=self.config.dropout_prob)
                 if seq_length is not None:
-                    (fw_output, bw_output), (fw_state, bw_state) = tf.nn.bidirectional_dynamic_rnn(fw_encoder_cell,
-                                                                                                   bw_encoder_cell,
-                                                                                                   input,
-                                                                                                   sequence_length=seq_length,
-                                                                                                   dtype=tf.float32)
+                    (fw_output, bw_output), (fw_state, bw_state) = tf.nn.bidirectional_dynamic_rnn(
+                        fw_encoder_cell, bw_encoder_cell, input, sequence_length=seq_length, dtype=tf.float32)
                 else:
-                    (fw_output, bw_output), (fw_state, bw_state) = tf.nn.bidirectional_dynamic_rnn(fw_encoder_cell,
-                                                                                                   bw_encoder_cell,
-                                                                                                   input,
-                                                                                                   dtype=tf.float32)
+                    (fw_output, bw_output), (fw_state, bw_state) = tf.nn.bidirectional_dynamic_rnn(
+                        fw_encoder_cell, bw_encoder_cell, input, dtype=tf.float32)
+
                 output = tf.concat([fw_output, bw_output], axis=-1)
 
                 state_c = tf.concat((fw_state.c, bw_state.c), 1)
@@ -228,16 +224,14 @@ class Model(object):
             #                                                    length_penalty_weight=0.0)
             # else:
             if self.mode == 'inference':
-                helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(self.embedding_map,
-                                                                  tf.fill([batch_size], self.start_token),
-                                                                  self.end_token)
+                helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
+                    self.embedding_map, tf.fill([batch_size], self.start_token), self.end_token)
             else:
                 helper = tf.contrib.seq2seq.TrainingHelper(input, self.decoder_length)
 
-            decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell,
-                                                      helper,
-                                                      initial_state,
-                                                      output_layer=projection_layer)
+            decoder = tf.contrib.seq2seq.BasicDecoder(
+                decoder_cell, helper, initial_state, output_layer=projection_layer)
+
             if self.mode == 'inference':
 
                 output, state, seq_lengths = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=6)
@@ -294,7 +288,7 @@ class Model(object):
             sent4 = sent4_out.sample_id
             # sent4 = sent4_output.predicted_ids
 
-            self.output = [sent1, sent2, sent3, sent4]
+            self.out = [sent1, sent2, sent3, sent4]
 
         else:
 
@@ -335,12 +329,12 @@ class Model(object):
 
             logits_3 = sent3_out.rnn_output
 
-            title2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.title2sent_sent_target,
-                                                                             logits=logits_1)
-            sent2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sent2sent_sent2_target,
-                                                                            logits=logits_2)
-            sent2next_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.sent2next_sent3_target,
-                                                                            logits=logits_3)
+            title2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=self.title2sent_sent_target, logits=logits_1)
+            sent2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=self.sent2sent_sent2_target, logits=logits_2)
+            sent2next_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=self.sent2next_sent3_target, logits=logits_3)
 
             self.cross_entropy_loss = [title2sent_losses, sent2sent_losses, sent2next_losses]
 

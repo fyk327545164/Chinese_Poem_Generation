@@ -63,6 +63,8 @@ however, the loss could be quickly decreased from 26 to 18 after hundreds of ste
 * Training on GPU:  
 Training on GPU gets tens of time faster than on CPU.
 * TensorBoard has been used during training time
+
+## Advanced Model: Transformer
 ## Sources Being Used
 
 Dataset used from: [This Repository](https://github.com/chinese-poetry/chinese-poetry)  
