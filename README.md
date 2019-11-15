@@ -9,8 +9,10 @@ This is a base-line model to generate a Chinese poem with the input of a user-de
 * TensorFlow 1.13
 
 ## Model Structure
-
+![alt text](https://github.com/fyk327545164/Chinese_Poem_Generation/tree/master/images/Encoder-Decoder.PNG)
 #### Training
+![alt text](https://github.com/fyk327545164/Chinese_Poem_Generation/tree/master/images/Training.PNG)
+
 The training process could be treated as a multi-task learning.  
   
 Several Encoder-Decoder are built to be trained:  
@@ -29,6 +31,7 @@ Each batch of data is to learn from the corresponding task(encoder-decoder).
   
 Perplexity is used as the eval metrics during training process.
 #### Inference
+![alt text](https://github.com/fyk327545164/Chinese_Poem_Generation/tree/master/images/Inference.PNG)
 The user inferences the model with a title as the input.  
   
 Inference Structure:  
