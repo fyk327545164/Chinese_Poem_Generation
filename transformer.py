@@ -95,16 +95,26 @@ class Transformer:
         self.positional_encoding_10 = build_positional_encoding(10)
         self.positional_encoding_5 = build_positional_encoding(5)
 
+        self.inference_input_holder = tf.placeholder(tf.string, shape=[None, None])
+        self.inference_input_length = tf.placeholder(tf.int32)
+        self.inference_positional_encoding = build_positional_encoding(self.inference_input_length)
+        self.inference_input = None
+
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
     def build_embedding(self):
 
         def embedding_helper(x, x_encoding):
             x_encoding = x_encoding * (self.config.embedding_dim ** 0.5)
-            return tf.nn.embedding_lookup(self.embedding_map, self.vocab.lookup(x)) + x_encoding
+            return tf.nn.dropout(tf.nn.embedding_lookup(self.embedding_map, self.vocab.lookup(x)) + x_encoding,
+                                 keep_prob=0.5)
 
         def masking_helper(lengths):
             return tf.sequence_mask(lengths, dtype=tf.float32)
+
+        if self.mode == 'inference':
+            self.inference_input = embedding_helper(self.inference_input_holder, self.inference_positional_encoding)
+            return
 
         self.title2sent_title = embedding_helper(self.title2sent_title_holder, self.positional_encoding_10)
         self.title2sent_sent = embedding_helper(self.title2sent_sent_holder, self.positional_encoding_5)
@@ -124,9 +134,12 @@ class Transformer:
         self.sent2next_input_mask = masking_helper(self.sent2next_input_mask_holder)
         self.sent2next_output_mask = masking_helper(self.sent2next_output_mask_holder)
 
-    def build_encoder_layer(self, mode, inputs, inputs_mask):
+    def build_encoder_layer(self, mode, inputs, inputs_mask=None):
 
-        out = tf.multiply(inputs, inputs_mask)
+        if inputs_mask:
+            out = tf.multiply(inputs, inputs_mask)
+        else:
+            out = inputs
 
         for num in range(self.config.num_layer):
             out = self.build_encoder_subLayer(out, mode + "_encoder_layer_" + str(num))
@@ -139,13 +152,16 @@ class Transformer:
 
         out = tf.math.l2_normalize(inputs + multiHead_out, axis=-1)
 
-        FF_out = self.build_FFNN(layer_scope, out)
+        FF_out = tf.nn.dropout(self.build_FFNN(layer_scope, out), keep_prob=0.5)
 
         return tf.math.l2_normalize(out + FF_out, axis=-1)
 
-    def build_decoder_layer(self, encoder_output, mode, inputs, inputs_mask):
+    def build_decoder_layer(self, encoder_output, mode, inputs, inputs_mask=None):
 
-        out = tf.multiply(inputs, inputs_mask)
+        if inputs_mask:
+            out = tf.multiply(inputs, inputs_mask)
+        else:
+            out = inputs
 
         for num in range(self.config.num_layer):
             out = self.build_decoder_sublayer(out, encoder_output, mode + "_decoder_layer_" + str(num))
@@ -162,7 +178,7 @@ class Transformer:
 
         out = tf.math.l2_normalize(out + multiHead_out, axis=-1)
 
-        FF_out = self.build_FFNN(layer_scope, out)
+        FF_out = tf.nn.dropout(self.build_FFNN(layer_scope, out), keep_prob=0.5)
 
         return tf.math.l2_normalize(out + FF_out, axis=-1)
 
@@ -222,29 +238,29 @@ class Transformer:
 
             title2sent_encoder_output = self.build_encoder_layer('title2sent',
                                                                  self.title2sent_title,
-                                                                 self.title2sent_input_mask)
+                                                                 inputs_mask=self.title2sent_input_mask)
             title2sent_out = self.build_decoder_layer(title2sent_encoder_output,
                                                       'title2sent',
                                                       self.title2sent_sent,
-                                                      self.title2sent_output_mask)
+                                                      inputs_mask=self.title2sent_output_mask)
             title2sent_out = tf.nn.softmax(title2sent_dense(title2sent_out))
 
             sent2sent_encoder_output = self.build_encoder_layer('sent2sent',
                                                                 self.sent2sent_sent1,
-                                                                self.sent2sent_input_mask)
+                                                                inputs_mask=self.sent2sent_input_mask)
             sent2sent_out = self.build_decoder_layer(sent2sent_encoder_output,
                                                      'sent2sent',
                                                      self.sent2sent_sent2,
-                                                     self.sent2sent_output_mask)
+                                                     inputs_mask=self.sent2sent_output_mask)
             sent2sent_out = tf.nn.softmax(sent2sent_dense(sent2sent_out))
 
             sent2next_encoder_output = self.build_encoder_layer('sent2next',
                                                                 self.sent2next_sent,
-                                                                self.sent2next_input_mask)
+                                                                inputs_mask=self.sent2next_input_mask)
             sent2next_out = self.build_decoder_layer(sent2next_encoder_output,
                                                      'sent2next',
                                                      self.sent2next_sent3,
-                                                     self.sent2next_output_mask)
+                                                     inputs_mask=self.sent2next_output_mask)
             sent2next_out = tf.nn.softmax(sent2next_dense(sent2next_out))
 
             title2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.title2sent_sent_target,
@@ -275,3 +291,11 @@ class Transformer:
             summary_eval_perplexity = tf.summary.scalar("eval_perplexity", self.perplexity)
 
             self.eval_summary = tf.summary.merge([summary_eval_loss, summary_eval_perplexity])
+
+        else:
+            return
+            # title2sent_encoder_output = self.build_encoder_layer('title2sent', self.inference_input)
+
+
+
+

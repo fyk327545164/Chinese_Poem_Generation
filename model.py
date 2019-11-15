@@ -241,7 +241,7 @@ class Model(object):
 
         return output, state, seq_lengths
 
-    def build_model(self):
+    def build(self):
 
         self.build_embedding()
 

@@ -35,21 +35,21 @@ def main(model_mode='seq2seq'):
         print("Building model...")
 
         config = configuration.Config()
+        mode = 'train'
 
         if model_mode == 'seq2seq':
-            mode = 'train'
 
             model = Model(mode=mode, vocab_size=vocab_size)
-            model.build_model()
 
             ckp_path = 'model/seq2seq_ckp/'
             log_path = 'model/seq2seq_log/'
         else:
-            model = Transformer(vocab_size)
-            model.build()
+            model = Transformer(vocab_size, mode=mode)
 
             ckp_path = 'model/transformer_ckp/'
             log_path = 'model/transformer_log/'
+
+        model.build()
 
         train_op = tf.train.AdamOptimizer().minimize(model.total_loss, global_step=model.global_step)
 

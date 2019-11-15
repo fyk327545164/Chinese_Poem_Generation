@@ -4,13 +4,14 @@ from __future__ import print_function
 
 import os
 import tensorflow as tf
+from transformer import Transformer
 from model import Model
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
-def main():
+def main(title, model_mode='seq2seq'):
 
     print("Building Vocab...")
     vocab = []
@@ -19,7 +20,7 @@ def main():
         for word in lines:
             vocab.append(word)
 
-    titles = [['春','意','浓'] for _ in range(2)]
+    titles = [title.split() for _ in range(2)]
 
     mode = 'inference'
 
@@ -27,9 +28,14 @@ def main():
 
         print("Building model...")
 
-        model = Model(mode=mode, vocab_size=len(vocab))
+        if model_mode == 'seq2seq':
+            model = Model(mode=mode, vocab_size=len(vocab))
+            ckp_path = 'model/seq2seq_ckp/'
+        else:
+            model = Transformer(len(vocab), mode=mode)
+            ckp_path = 'model/transformer_ckp/'
 
-        model.build_model()
+        model.build()
 
         with tf.Session() as sess:
 
@@ -39,18 +45,18 @@ def main():
 
             saver = tf.train.Saver()
             print("Loading Checkpoint....")
-            saver.restore(sess, tf.train.latest_checkpoint('./model/ckp/'))
+            saver.restore(sess, tf.train.latest_checkpoint(ckp_path))
             print("Checkpoint loaded at step " + str(model.global_step.eval()))
 
-            sens = sess.run(model.output, feed_dict={model.title2sent_title_holder: titles})
+            sens = sess.run(model.out, feed_dict={model.title2sent_title_holder: titles})
 
-            # print(sens)
             print(titles[0])
             for sen in sens:
                 s = []
-                # print(sen)
                 for i in sen[0]:
                     s.append(vocab[i][:-1])
                 print(s)
 
-main()
+
+if __name__ == '__main__':
+    main("秋意浓")
