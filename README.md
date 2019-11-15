@@ -10,7 +10,7 @@ This is a base-line model to generate a Chinese poem with the input of a user-de
 
 ## Model Structure
 ![Screenshot](https://github.com/fyk327545164/Chinese_Poem_Generation/blob/master/images/Encoder-Decoder.PNG)
-#### Training
+### Training
 ![Screenshot](https://github.com/fyk327545164/Chinese_Poem_Generation/blob/master/images/Training.PNG)
 
 The training process could be treated as a multi-task learning.  
@@ -30,7 +30,7 @@ During training, 3 batches of input are feed into the model.
 Each batch of data is to learn from the corresponding task(encoder-decoder).   
   
 Perplexity is used as the eval metrics during training process.
-#### Inference
+### Inference
 ![Screenshot](https://github.com/fyk327545164/Chinese_Poem_Generation/blob/master/images/Inference.PNG)
 The user inferences the model with a title as the input.  
   
