@@ -7,8 +7,8 @@ class Configuration:
     def __init__(self):
         self.embedding_dim = 512
 
-        self.multi_head_h = 4
-        self.num_layer = 2
+        self.multi_head_h = 8
+        self.num_layer = 4
 
         self.k_dim = self.embedding_dim // self.multi_head_h
         self.v_dim = self.embedding_dim // self.multi_head_h
@@ -97,7 +97,7 @@ class Transformer:
 
         self.inference_input_holder = tf.placeholder(tf.string, shape=[None, None])
         self.inference_input_length = tf.placeholder(tf.int32)
-        self.inference_positional_encoding = build_positional_encoding(self.inference_input_length)
+        # self.inference_positional_encoding = build_positional_encoding(self.inference_input_length)
         self.inference_input = None
 
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
@@ -136,7 +136,7 @@ class Transformer:
 
     def build_encoder_layer(self, mode, inputs, inputs_mask=None):
 
-        if inputs_mask:
+        if inputs_mask is not None:
             out = tf.multiply(inputs, inputs_mask)
         else:
             out = inputs
@@ -158,7 +158,7 @@ class Transformer:
 
     def build_decoder_layer(self, encoder_output, mode, inputs, inputs_mask=None):
 
-        if inputs_mask:
+        if inputs_mask is not None:
             out = tf.multiply(inputs, inputs_mask)
         else:
             out = inputs

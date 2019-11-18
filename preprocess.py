@@ -4,6 +4,7 @@ from __future__ import print_function
 
 from langconv import *
 import json
+import operator
 import numpy as np
 
 
@@ -11,7 +12,7 @@ def build_data_files():
 
     file_names = ["poet.tang.0.json"]
 
-    for i in range(1, 3):
+    for i in range(1, 58):
         file = "poet.tang." + str(i) + "000.json"
         file_names.append(file)
 
@@ -36,7 +37,9 @@ def build_input_data(data_files):
     sent2sent = []
     sent2next = []
 
-    vocab = ['<start>', '<end>', '<pad>']
+    # vocab = ['<start>', '<end>', '<pad>']
+
+    word_count = {}
 
     for file in data_files:
         file = 'data/' + file
@@ -58,15 +61,21 @@ def build_input_data(data_files):
                 title = title.split()[0]
                 title_s = []
                 for c in title:
-                    if c not in vocab:
-                        vocab.append(c)
+                    if c not in word_count:
+                        word_count[c] = 1
+                        # vocab.append(c)
+                    else:
+                        word_count[c] += 1
                     title_s.append(c)
 
                 sent = Converter('zh-hans').convert(s['paragraphs'][0][:5])
                 sent_s = []
                 for c in sent:
-                    if c not in vocab:
-                        vocab.append(c)
+                    if c not in word_count:
+                        word_count[c] = 1
+                        # vocab.append(c)
+                    else:
+                        word_count[c] += 1
                     sent_s.append(c)
                 sent_start = ['<start>'] + sent_s[:]
                 sent_end = sent_s[:] + ['<end>']
@@ -76,8 +85,11 @@ def build_input_data(data_files):
                     sent1 = Converter('zh-hans').convert(s['paragraphs'][i][:5])
                     sent1_s = []
                     for c in sent1:
-                        if c not in vocab:
-                            vocab.append(c)
+                        if c not in word_count:
+                            word_count[c] = 1
+                            # vocab.append(c)
+                        else:
+                            word_count[c] += 1
                         sent1_s.append(c)
                     if len(sent1_s) != 5:
                         continue
@@ -85,16 +97,22 @@ def build_input_data(data_files):
                     # sent2 = check_vocab(sent2, vocab)
                     sent2_s = []
                     for c in sent2:
-                        if c not in vocab:
-                            vocab.append(c)
+                        if c not in word_count:
+                            word_count[c] = 1
+                            # vocab.append(c)
+                        else:
+                            word_count[c] += 1
                         sent2_s.append(c)
                     if len(sent2_s) != 5:
                         continue
                     sent3 = Converter('zh-hans').convert(s['paragraphs'][i+1][:5])
                     sent3_s = []
                     for c in sent3:
-                        if c not in vocab:
-                            vocab.append(c)
+                        if c not in word_count:
+                            word_count[c] = 1
+                            # vocab.append(c)
+                        else:
+                            word_count[c] += 1
                         sent3_s.append(c)
                     if len(sent3_s) != 5:
                         continue
@@ -111,14 +129,20 @@ def build_input_data(data_files):
                 sent1 = Converter('zh-hans').convert(s['paragraphs'][num_sents-1][:5])
                 sent1_s = []
                 for c in sent1:
-                    if c not in vocab:
-                        vocab.append(c)
+                    if c not in word_count:
+                        word_count[c] = 1
+                        # vocab.append(c)
+                    else:
+                        word_count[c] += 1
                     sent1_s.append(c)
                 sent2 = Converter('zh-hans').convert(s['paragraphs'][num_sents-1][5+1:-1])
                 sent2_s = []
                 for c in sent2:
-                    if c not in vocab:
-                        vocab.append(c)
+                    if c not in word_count:
+                        word_count[c] = 1
+                        # vocab.append(c)
+                    else:
+                        word_count[c] += 1
                     sent2_s.append(c)
 
                 sent2_start = ['<start>'] + sent2_s[:]
@@ -126,11 +150,14 @@ def build_input_data(data_files):
 
                 sent2sent.append([title_s, sent1_s, sent2_start, sent2_end])
 
+    sorted_words = sorted(word_count.items(), key=operator.itemgetter(1), reverse=True)
     with open('model/vocab.txt', 'w', encoding='utf-8') as f:
-        for word in vocab:
+        for w in ['<start>', '<end>', '<pad>']:
+            f.write(w + '\n')
+        for word, val in sorted_words[:2997]:
             f.write(word + '\n')
 
-    return title2sent, sent2sent, sent2next, len(vocab)
+    return title2sent, sent2sent, sent2next, 3000
 
 
 def build_input_batch(title2sent, sent2sent, sent2next, batch_size, model):

@@ -22,13 +22,13 @@ def main(model_mode='seq2seq'):
     np.random.shuffle(sent2sent)
     np.random.shuffle(sent2next)
 
-    eval_title2sent = title2sent[:10]
-    eval_sent2sent = sent2sent[:10]
-    eval_sent2next = sent2next[:10]
+    eval_title2sent = title2sent[:3200]
+    eval_sent2sent = sent2sent[:3200]
+    eval_sent2next = sent2next[:3200]
 
-    train_title2sent = title2sent[10:]
-    train_sent2sent = sent2sent[10:]
-    train_sent2next = sent2next[10:]
+    train_title2sent = title2sent[3200:]
+    train_sent2sent = sent2sent[3200:]
+    train_sent2next = sent2next[3200:]
 
     with tf.Graph().as_default():
 
@@ -51,7 +51,7 @@ def main(model_mode='seq2seq'):
 
         model.build()
 
-        train_op = tf.train.AdamOptimizer().minimize(model.total_loss, global_step=model.global_step)
+        train_op = tf.train.AdamOptimizer(0.01).minimize(model.total_loss, global_step=model.global_step)
 
         saver = tf.train.Saver(max_to_keep=1)
 
@@ -92,7 +92,6 @@ def main(model_mode='seq2seq'):
                     writer.add_summary(summary, step)
                 except:
                     print("feed error")
-                    continue
 
                 end_time = time.time()
 
@@ -155,4 +154,4 @@ def run_eval(eval_title2sent, eval_sent2sent, eval_sent2next, batch_size, model,
 
 
 if __name__ == '__main__':
-    main(model_mode='seq2seq')
+    main(model_mode='transformer')
