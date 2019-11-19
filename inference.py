@@ -11,7 +11,7 @@ from model import Model
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
-def main(title, model_mode='seq2seq'):
+def main(title, model_mode='transformer'):
 
     print("Building Vocab...")
     vocab = []
@@ -20,7 +20,7 @@ def main(title, model_mode='seq2seq'):
         for word in lines:
             vocab.append(word)
 
-    titles = [title for _ in range(2)]
+    titles = [title for _ in range(1)]
 
     mode = 'inference'
 
@@ -50,11 +50,11 @@ def main(title, model_mode='seq2seq'):
 
             sens = sess.run(model.out, feed_dict={model.title2sent_title_holder: titles})
 
-            print(titles[0])
+            print(sens)
             for sen in sens:
                 s = []
-                for i in sen[0]:
-                    s.append(vocab[i][:-1])
+                for i in sen:
+                    s.append(vocab[i[0]][:-1])
                 print(s)
 
 

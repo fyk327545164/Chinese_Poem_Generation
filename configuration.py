@@ -20,4 +20,4 @@ class Config(object):
 
         self.eval_inf_step = 200
 
-        self.save_checkpoint_step = 1000
+        self.save_checkpoint_step = 500

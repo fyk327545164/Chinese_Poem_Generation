@@ -5,10 +5,10 @@ import math
 
 class Configuration:
     def __init__(self):
-        self.embedding_dim = 256
+        self.embedding_dim = 512
 
-        self.multi_head_h = 4
-        self.num_layer = 3
+        self.multi_head_h = 8
+        self.num_layer = 2
 
         self.k_dim = self.embedding_dim // self.multi_head_h
         self.v_dim = self.embedding_dim // self.multi_head_h
@@ -100,7 +100,7 @@ class Transformer:
         def embedding_helper(x, x_encoding):
             x_encoding = x_encoding * (self.config.embedding_dim ** 0.5)
             return tf.nn.dropout(tf.nn.embedding_lookup(self.embedding_map, self.vocab.lookup(x)) + x_encoding,
-                                 keep_prob=0.5)
+                                 keep_prob=0.9)
 
         def masking_helper(lengths, max_length):
 
@@ -108,9 +108,10 @@ class Transformer:
                 tf.expand_dims(
                     tf.sequence_mask(lengths, max_length, dtype=tf.float32), axis=-1), [1, 1, self.config.embedding_dim])
 
-        # if self.mode == 'inference':
-        #     self.inference_input = embedding_helper(self.inference_input_holder, self.inference_positional_encoding)
-        #     return
+        if self.mode == 'inference':
+            self.inference_input = tf.nn.embedding_lookup(self.embedding_map,
+                                                          self.vocab.lookup(self.title2sent_title_holder))
+            return
 
         self.title2sent_title = embedding_helper(self.title2sent_title_holder, self.positional_encoding_10)
         self.title2sent_sent = embedding_helper(self.title2sent_sent_holder, self.positional_encoding_6)
@@ -149,23 +150,27 @@ class Transformer:
 
         return out + FF_out
 
-    def build_decoder_layer(self, encoder_output, mode, inputs):
+    def build_decoder_layer(self, encoder_output, mode, inputs, mask_head=True):
 
         out = inputs
 
         for num in range(self.config.num_layer):
 
-            out = self.build_decoder_sublayer(out, encoder_output, mode + "_decoder_layer_" + str(num))
+            out = self.build_decoder_sublayer(out, encoder_output, mode + "_decoder_layer_" + str(num), mask_head=mask_head)
 
         return out
 
-    def build_decoder_sublayer(self, inputs, encoder_output, layer_scope):
+    def build_decoder_sublayer(self, inputs, encoder_output, layer_scope, mask_head=True):
 
-        masked_multiHead_out = self.build_multiHead_attention(layer_scope + "_mask", inputs, inputs, inputs, mask=True)
+        if mask_head:
+            masked_multiHead_out = self.build_multiHead_attention(layer_scope + "_mask", inputs, inputs, inputs, mask=True)
 
-        out = tf.math.l2_normalize(inputs + masked_multiHead_out, axis=-1)
+            out = tf.math.l2_normalize(inputs + masked_multiHead_out, axis=-1)
 
-        multiHead_out = self.build_multiHead_attention(layer_scope, out, encoder_output, encoder_output, mask=True)
+        else:
+            out = inputs
+
+        multiHead_out = self.build_multiHead_attention(layer_scope, out, encoder_output, encoder_output)
 
         out = tf.math.l2_normalize(out + multiHead_out, axis=-1)
 
@@ -215,7 +220,7 @@ class Transformer:
     def build_FFNN(self, scope, inputs):
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-            dense_FF_1 = tf.layers.Dense(self.config.embedding_dim * 4, name="dense_FF1")
+            dense_FF_1 = tf.layers.Dense(self.config.embedding_dim * 2, name="dense_FF1")
             dense_FF_2 = tf.layers.Dense(self.config.embedding_dim, name="dense_FF2")
 
             out = dense_FF_2(tf.nn.relu(dense_FF_1(inputs)))
@@ -284,9 +289,42 @@ class Transformer:
             self.eval_summary = tf.summary.merge([summary_eval_loss, summary_eval_perplexity])
 
         else:
-            return
-            # title2sent_encoder_output = self.build_encoder_layer('title2sent', self.inference_input)
 
+            def decoding(encoder_input, scope, dense):
+
+                decoder_sent = tf.constant([[0]])
+                sent = []
+                decode_sent_emb = tf.nn.embedding_lookup(self.embedding_map, decoder_sent)
+
+                for i in range(5):
+                    decoder_out = self.build_decoder_layer(encoder_input, scope, decode_sent_emb, mask_head=False)
+                    decoder_out = tf.argmax(tf.nn.softmax(dense(decoder_out)), dimension=-1)
+                    char_index = tf.gather_nd(decoder_out, [[0, i]])
+
+                    sent.append(char_index)
+
+                    decoder_sent = tf.concat([decoder_sent, [char_index]], axis=1)
+                    decode_sent_emb = tf.nn.embedding_lookup(self.embedding_map, decoder_sent)
+
+                return sent
+
+            title_output = self.build_encoder_layer('title2sent', self.inference_input)
+            sent1 = decoding(title_output, 'title2sent', title2sent_dense)
+            sent1_emb = tf.nn.embedding_lookup(self.embedding_map, tf.expand_dims(tf.concat(sent1, axis=0), 0))
+
+            sent1_output = self.build_encoder_layer('sent2sent', sent1_emb)
+            sent2 = decoding(sent1_output, 'sent2sent', sent2sent_dense)
+            sent2_emb = tf.nn.embedding_lookup(self.embedding_map, tf.expand_dims(tf.concat(sent2, axis=0), 0))
+
+            sent_t_1_2 = tf.concat([self.inference_input, sent1_emb, sent2_emb], axis=1)
+            sent3_output = self.build_encoder_layer('sent2next', sent_t_1_2)
+            sent3 = decoding(sent3_output, 'sent2next', sent2next_dense)
+            sent3_emb = tf.nn.embedding_lookup(self.embedding_map, tf.expand_dims(tf.concat(sent3, axis=0), 0))
+
+            sent3_output = self.build_encoder_layer('sent2sent', sent3_emb)
+            sent4 = decoding(sent3_output, 'sent2sent', sent2sent_dense)
+
+            self.out = [sent1, sent2, sent3, sent4]
 
 
 
