@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import tensorflow as tf
 from preprocess import *
 from model import Model
@@ -11,12 +7,14 @@ import time
 import os
 import math
 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
 
 def main(model_mode='seq2seq'):
     data_files = build_data_files()
 
     print("Building input data...")
-    title2sent, sent2sent, sent2next, vocab_size = build_input_data(data_files)
+    title2sent, sent2sent, sent2next, vocab_size, vocab_weight = build_input_data(data_files)
 
     np.random.shuffle(title2sent)
     np.random.shuffle(sent2sent)
@@ -39,19 +37,23 @@ def main(model_mode='seq2seq'):
 
         if model_mode == 'seq2seq':
 
-            model = Model(mode=mode, vocab_size=vocab_size)
+            model = Model(mode=mode, vocab_size=vocab_size, weights=vocab_weight)
 
             ckp_path = 'model/seq2seq_ckp/'
             log_path = 'model/seq2seq_log/'
+
+            lr = 0.001
         else:
             model = Transformer(vocab_size, mode=mode)
 
             ckp_path = 'model/transformer_ckp/'
             log_path = 'model/transformer_log/'
 
+            lr = 0.005
+
         model.build()
 
-        train_op = tf.train.AdamOptimizer(0.01).minimize(model.total_loss, global_step=model.global_step)
+        train_op = tf.train.AdamOptimizer(lr).minimize(model.total_loss, global_step=model.global_step)
 
         saver = tf.train.Saver(max_to_keep=1)
 
@@ -92,10 +94,11 @@ def main(model_mode='seq2seq'):
                     writer.add_summary(summary, step)
                 except:
                     print("feed error")
+                    continue
 
                 end_time = time.time()
 
-                print("After " + str(step) + " steps: training loss is " + str(round(train_loss, 5)) + "---" +
+                print("After " + str(step) + " steps: training loss is " + str(round(train_loss, 8)) + "---" +
                       str(round(end_time - start_time, 2)) + "s/step")
 
                 if step % config.eval_inf_step == 0:

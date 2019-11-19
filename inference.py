@@ -20,7 +20,7 @@ def main(title, model_mode='seq2seq'):
         for word in lines:
             vocab.append(word)
 
-    titles = [title.split() for _ in range(2)]
+    titles = [title for _ in range(2)]
 
     mode = 'inference'
 
@@ -59,4 +59,4 @@ def main(title, model_mode='seq2seq'):
 
 
 if __name__ == '__main__':
-    main("秋意浓")
+    main(["秋", "意", "浓"])

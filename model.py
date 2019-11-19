@@ -9,7 +9,7 @@ from tensorflow.python.layers import core as layers_core
 
 class Model(object):
 
-    def __init__(self, mode, vocab_size):
+    def __init__(self, mode, vocab_size, weights=None):
 
         # ['train', 'eval', 'inference']
         self.mode = mode
@@ -19,6 +19,10 @@ class Model(object):
         self.vocab_size = vocab_size + 1
         # Embedding Map
         self.embedding_map = tf.get_variable('embedding_map', [self.vocab_size, self.config.embedding_dim])
+
+        if weights is not None:
+            self.vocab_weight = tf.cast(
+                tf.tile(tf.expand_dims(tf.constant(weights), axis=1), [1, self.config.embedding_dim]), tf.float32)
 
         self.vocab = tf.contrib.lookup.index_table_from_file('model/vocab.txt', num_oov_buckets=1)
 
@@ -85,10 +89,10 @@ class Model(object):
     def build_embedding(self):
 
         def embedding_helper(input_holder):
-            return tf.nn.embedding_lookup(self.embedding_map, self.vocab.lookup(input_holder))
+            return tf.nn.embedding_lookup(self.embedding_map * self.vocab_weight, self.vocab.lookup(input_holder))
 
         if self.mode == 'inference':
-            self.title2sent_title = embedding_helper(self.title2sent_title_holder)
+            self.title2sent_title = tf.nn.embedding_lookup(self.embedding_map, self.vocab.lookup(self.title2sent_title_holder))
             return
 
         self.title2sent_title = embedding_helper(self.title2sent_title_holder)

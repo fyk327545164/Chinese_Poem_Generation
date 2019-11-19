@@ -5,10 +5,10 @@ import math
 
 class Configuration:
     def __init__(self):
-        self.embedding_dim = 512
+        self.embedding_dim = 256
 
-        self.multi_head_h = 8
-        self.num_layer = 4
+        self.multi_head_h = 4
+        self.num_layer = 3
 
         self.k_dim = self.embedding_dim // self.multi_head_h
         self.v_dim = self.embedding_dim // self.multi_head_h
@@ -21,52 +21,43 @@ class Transformer:
 
         self.config = config
 
-        self.vocab_size = vocab_size
+        self.vocab_size = vocab_size + 1
 
         self.mode = mode
 
         self.vocab = tf.contrib.lookup.index_table_from_file('model/vocab.txt', num_oov_buckets=1)
 
-        self.title2sent_title_holder = tf.placeholder(tf.string, shape=[None, None])
-        self.title2sent_sent_holder = tf.placeholder(tf.string, shape=[None, None])
-        self.title2sent_sent_target_holder = tf.placeholder(tf.string, shape=[None, None])
+        self.title2sent_title_holder = tf.placeholder(tf.string, shape=[None, None], name='title2sent_title_holder')
+        self.title2sent_sent_holder = tf.placeholder(tf.string, shape=[None, None], name='title2sent_sent_holder')
+        self.title2sent_sent_target_holder = tf.placeholder(tf.string, shape=[None, None], name='title2sent_sent_target_holder')
 
-        self.title2sent_input_mask_holder = tf.placeholder(tf.int32, shape=[None, None])
-        self.title2sent_output_mask_holder = tf.placeholder(tf.int32, shape=[None, None])
+        self.title2sent_input_mask_holder = tf.placeholder(tf.int32, shape=[None], name='title2sent_input_mask_holder')
 
-        self.sent2sent_sent1_holder = tf.placeholder(tf.string, shape=[None, None])
-        self.sent2sent_sent2_holder = tf.placeholder(tf.string, shape=[None, None])
-        self.sent2sent_sent2_target_holder = tf.placeholder(tf.string, shape=[None, None])
+        self.sent2sent_sent1_holder = tf.placeholder(tf.string, shape=[None, None], name='sent2sent_sent1_holder')
+        self.sent2sent_sent2_holder = tf.placeholder(tf.string, shape=[None, None], name='sent2sent_sent2_holder')
+        self.sent2sent_sent2_target_holder = tf.placeholder(tf.string, shape=[None, None], name='sent2sent_sent2_target_holder')
 
-        self.sent2sent_input_mask_holder = tf.placeholder(tf.int32, shape=[None, None])
-        self.sent2sent_output_mask_holder = tf.placeholder(tf.int32, shape=[None, None])
+        self.sent2next_sent_holder = tf.placeholder(tf.string, shape=[None, None], name='sent2next_sent_holder')
+        self.sent2next_sent3_holder = tf.placeholder(tf.string, shape=[None, None], name='sent2next_sent3_holder')
+        self.sent2next_sent3_target_holder = tf.placeholder(tf.string, shape=[None, None], name='sent2next_sent3_target_holder')
 
-        self.sent2next_sent_holder = tf.placeholder(tf.string, shape=[None, None])
-        self.sent2next_sent3_holder = tf.placeholder(tf.string, shape=[None, None])
-        self.sent2next_sent3_target_holder = tf.placeholder(tf.string, shape=[None, None])
-
-        self.sent2next_input_mask_holder = tf.placeholder(tf.int32, shape=[None, None])
-        self.sent2next_output_mask_holder = tf.placeholder(tf.int32, shape=[None, None])
+        self.sent2next_input_mask_holder = tf.placeholder(tf.int32, shape=[None], name='sent2next_input_mask_holder')
 
         self.title2sent_title = None
         self.title2sent_sent = None
         self.title2sent_sent_target = None
         self.title2sent_input_mask = None
-        self.title2sent_output_mask = None
 
         self.sent2sent_sent1 = None
         self.sent2sent_sent2 = None
         self.sent2sent_sent2_target = None
-        self.sent2sent_input_mask = None
-        self.sent2sent_output_mask = None
 
         self.sent2next_sent = None
         self.sent2next_sent3 = None
         self.sent2next_sent3_target = None
         self.sent2next_input_mask = None
-        self.sent2next_output_mask = None
 
-        self.embedding_map = tf.get_variable('embedding_map', shape=[vocab_size, self.config.embedding_dim])
+        self.embedding_map = tf.get_variable('embedding_map', shape=[self.vocab_size, self.config.embedding_dim])
 
         self.out = None
 
@@ -92,7 +83,9 @@ class Transformer:
             encoding[1:, 1::2] = np.cos(encoding[1:, 1::2])
             return tf.convert_to_tensor(np.array([encoding for _ in range(self.config.batch_size)]), dtype=tf.float32)
 
+        self.positional_encoding_20 = build_positional_encoding(20)
         self.positional_encoding_10 = build_positional_encoding(10)
+        self.positional_encoding_6 = build_positional_encoding(6)
         self.positional_encoding_5 = build_positional_encoding(5)
 
         self.inference_input_holder = tf.placeholder(tf.string, shape=[None, None])
@@ -109,30 +102,29 @@ class Transformer:
             return tf.nn.dropout(tf.nn.embedding_lookup(self.embedding_map, self.vocab.lookup(x)) + x_encoding,
                                  keep_prob=0.5)
 
-        def masking_helper(lengths):
-            return tf.sequence_mask(lengths, dtype=tf.float32)
+        def masking_helper(lengths, max_length):
 
-        if self.mode == 'inference':
-            self.inference_input = embedding_helper(self.inference_input_holder, self.inference_positional_encoding)
-            return
+            return tf.tile(
+                tf.expand_dims(
+                    tf.sequence_mask(lengths, max_length, dtype=tf.float32), axis=-1), [1, 1, self.config.embedding_dim])
+
+        # if self.mode == 'inference':
+        #     self.inference_input = embedding_helper(self.inference_input_holder, self.inference_positional_encoding)
+        #     return
 
         self.title2sent_title = embedding_helper(self.title2sent_title_holder, self.positional_encoding_10)
-        self.title2sent_sent = embedding_helper(self.title2sent_sent_holder, self.positional_encoding_5)
+        self.title2sent_sent = embedding_helper(self.title2sent_sent_holder, self.positional_encoding_6)
         self.title2sent_sent_target = self.vocab.lookup(self.title2sent_sent_target_holder)
-        self.title2sent_input_mask = masking_helper(self.title2sent_input_mask_holder)
-        self.title2sent_output_mask = masking_helper(self.title2sent_output_mask_holder)
+        self.title2sent_input_mask = masking_helper(self.title2sent_input_mask_holder, 10)
 
         self.sent2sent_sent1 = embedding_helper(self.sent2sent_sent1_holder, self.positional_encoding_5)
-        self.sent2sent_sent2 = embedding_helper(self.sent2sent_sent2_holder, self.positional_encoding_5)
+        self.sent2sent_sent2 = embedding_helper(self.sent2sent_sent2_holder, self.positional_encoding_6)
         self.sent2sent_sent2_target = self.vocab.lookup(self.sent2sent_sent2_target_holder)
-        self.sent2sent_input_mask = masking_helper(self.sent2sent_input_mask_holder)
-        self.sent2sent_output_mask = masking_helper(self.sent2sent_output_mask_holder)
 
-        self.sent2next_sent = embedding_helper(self.sent2next_sent_holder, self.positional_encoding_10)
-        self.sent2next_sent3 = embedding_helper(self.sent2next_sent3_holder, self.positional_encoding_5)
+        self.sent2next_sent = embedding_helper(self.sent2next_sent_holder, self.positional_encoding_20)
+        self.sent2next_sent3 = embedding_helper(self.sent2next_sent3_holder, self.positional_encoding_6)
         self.sent2next_sent3_target = self.vocab.lookup(self.sent2next_sent3_target_holder)
-        self.sent2next_input_mask = masking_helper(self.sent2next_input_mask_holder)
-        self.sent2next_output_mask = masking_helper(self.sent2next_output_mask_holder)
+        self.sent2next_input_mask = masking_helper(self.sent2next_input_mask_holder, 20)
 
     def build_encoder_layer(self, mode, inputs, inputs_mask=None):
 
@@ -142,6 +134,7 @@ class Transformer:
             out = inputs
 
         for num in range(self.config.num_layer):
+
             out = self.build_encoder_subLayer(out, mode + "_encoder_layer_" + str(num))
 
         return out
@@ -152,18 +145,16 @@ class Transformer:
 
         out = tf.math.l2_normalize(inputs + multiHead_out, axis=-1)
 
-        FF_out = tf.nn.dropout(self.build_FFNN(layer_scope, out), keep_prob=0.5)
+        FF_out = self.build_FFNN(layer_scope, out)
 
-        return tf.math.l2_normalize(out + FF_out, axis=-1)
+        return out + FF_out
 
-    def build_decoder_layer(self, encoder_output, mode, inputs, inputs_mask=None):
+    def build_decoder_layer(self, encoder_output, mode, inputs):
 
-        if inputs_mask is not None:
-            out = tf.multiply(inputs, inputs_mask)
-        else:
-            out = inputs
+        out = inputs
 
         for num in range(self.config.num_layer):
+
             out = self.build_decoder_sublayer(out, encoder_output, mode + "_decoder_layer_" + str(num))
 
         return out
@@ -178,9 +169,9 @@ class Transformer:
 
         out = tf.math.l2_normalize(out + multiHead_out, axis=-1)
 
-        FF_out = tf.nn.dropout(self.build_FFNN(layer_scope, out), keep_prob=0.5)
+        FF_out = self.build_FFNN(layer_scope, out)
 
-        return tf.math.l2_normalize(out + FF_out, axis=-1)
+        return out + FF_out
 
     def build_scaled_dotProduct_attention(self, Q, K, V, mask=False):
 
@@ -217,7 +208,9 @@ class Transformer:
 
             dense_multiHead = tf.layers.Dense(self.config.embedding_dim, name="dense_multiHead")
 
-        return dense_multiHead(multiHead)
+            out = dense_multiHead(multiHead)
+
+        return out
 
     def build_FFNN(self, scope, inputs):
 
@@ -225,7 +218,9 @@ class Transformer:
             dense_FF_1 = tf.layers.Dense(self.config.embedding_dim * 4, name="dense_FF1")
             dense_FF_2 = tf.layers.Dense(self.config.embedding_dim, name="dense_FF2")
 
-        return dense_FF_2(tf.nn.relu(dense_FF_1(inputs)))
+            out = dense_FF_2(tf.nn.relu(dense_FF_1(inputs)))
+
+        return out
 
     def build(self):
         self.build_embedding()
@@ -241,27 +236,23 @@ class Transformer:
                                                                  inputs_mask=self.title2sent_input_mask)
             title2sent_out = self.build_decoder_layer(title2sent_encoder_output,
                                                       'title2sent',
-                                                      self.title2sent_sent,
-                                                      inputs_mask=self.title2sent_output_mask)
-            title2sent_out = tf.nn.softmax(title2sent_dense(title2sent_out))
+                                                      self.title2sent_sent)
+            title2sent_out = title2sent_dense(title2sent_out)
 
             sent2sent_encoder_output = self.build_encoder_layer('sent2sent',
-                                                                self.sent2sent_sent1,
-                                                                inputs_mask=self.sent2sent_input_mask)
+                                                                self.sent2sent_sent1)
             sent2sent_out = self.build_decoder_layer(sent2sent_encoder_output,
                                                      'sent2sent',
-                                                     self.sent2sent_sent2,
-                                                     inputs_mask=self.sent2sent_output_mask)
-            sent2sent_out = tf.nn.softmax(sent2sent_dense(sent2sent_out))
+                                                     self.sent2sent_sent2)
+            sent2sent_out = sent2sent_dense(sent2sent_out)
 
             sent2next_encoder_output = self.build_encoder_layer('sent2next',
                                                                 self.sent2next_sent,
                                                                 inputs_mask=self.sent2next_input_mask)
             sent2next_out = self.build_decoder_layer(sent2next_encoder_output,
                                                      'sent2next',
-                                                     self.sent2next_sent3,
-                                                     inputs_mask=self.sent2next_output_mask)
-            sent2next_out = tf.nn.softmax(sent2next_dense(sent2next_out))
+                                                     self.sent2next_sent3)
+            sent2next_out = sent2next_dense(sent2next_out)
 
             title2sent_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.title2sent_sent_target,
                                                                                logits=title2sent_out)

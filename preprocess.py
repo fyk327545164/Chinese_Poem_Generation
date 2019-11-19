@@ -1,11 +1,8 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from langconv import *
 import json
 import operator
 import numpy as np
+import math
 
 
 def build_data_files():
@@ -150,14 +147,27 @@ def build_input_data(data_files):
 
                 sent2sent.append([title_s, sent1_s, sent2_start, sent2_end])
 
-    sorted_words = sorted(word_count.items(), key=operator.itemgetter(1), reverse=True)
+    sum_val = sum(word_count.values())
+    for key in word_count:
+        word_count[key] = (word_count[key]**(3/4)) / (sum_val ** (3/4))
+
+    sorted_words = sorted(word_count.items(), key=operator.itemgetter(1), reverse=True)[:5997]
+
     with open('model/vocab.txt', 'w', encoding='utf-8') as f:
         for w in ['<start>', '<end>', '<pad>']:
             f.write(w + '\n')
-        for word, val in sorted_words[:2997]:
+        for word, val in sorted_words:
             f.write(word + '\n')
+    # with open('model/vocab.txt', 'w', encoding='utf-8') as f:
+    #     for w in ['<start>', '<end>', '<pad>']:
+    #         f.write(w + '\n')
+    #     for word, val in word_count.items():
+    #         f.write(word + '\n')
 
-    return title2sent, sent2sent, sent2next, 3000
+    return title2sent, sent2sent, sent2next, len(sorted_words) + 3, \
+           np.array([1-math.exp(math.log(1/(sum_val ** (3/4)))) for _ in range(3)] +
+                    [1-math.exp(math.log(val)) for key, val in sorted_words] +
+                    [1-math.exp(math.log(1/(sum_val ** (3/4))))])
 
 
 def build_input_batch(title2sent, sent2sent, sent2next, batch_size, model):
@@ -253,56 +263,56 @@ def build_transformer_batch(title2sent, sent2sent, sent2next, batch_size, model)
     sent2next_sent = []
     sent2next_sent3 = []
     sent2next_sent3_target = []
+    sent2next_input_mask = []
 
     for i in range(batch_size):
         title, start_sent, end_sent = title2sent.pop(0)
         if len(title) >= 10:
             title2sent_title.append(title[:10])
-            title2sent_input_mask.append([512 for _ in range(10)])
+            title2sent_input_mask.append(10)
         else:
             t = title[:]
-            t_mask = [512 for _ in range(len(title))]
             for _ in range(10 - len(title)):
                 t.append('<pad>')
-                t_mask.append(0)
-            title2sent_title.append(t)
-            title2sent_input_mask.append(t_mask)
-        title2sent_sent.append(start_sent[1:])
-        title2sent_sent_target.append(end_sent[:-1])
+            title2sent_title.append(t[:])
+            title2sent_input_mask.append(len(title))
+        title2sent_sent.append(start_sent[:])
+        title2sent_sent_target.append(end_sent[:])
         title2sent.append([title, start_sent, end_sent])
 
         title1, sent1, start_sent2, end_sent2 = sent2sent.pop(0)
         sent2sent_sent1.append(sent1[:])
-        sent2sent_sent2.append(start_sent2[1:])
-        sent2sent_sent2_target.append(end_sent2[:-1])
+        sent2sent_sent2.append(start_sent2[:])
+        sent2sent_sent2_target.append(end_sent2[:])
         sent2sent.append([title1, sent1, start_sent2, end_sent2])
 
         title2, sent1, sent2, start_sent3, end_sent3 = sent2next.pop(0)
-        sent2next_sent.append(sent1[:]+sent2[:])
-        sent2next_sent3.append(start_sent3[1:])
-        sent2next_sent3_target.append(end_sent3[:-1])
+        if len(title2) >= 10:
+            t_sent = title2[:10] + sent1[:] + sent2[:]
+            sent2next_input_mask.append(20)
+        else:
+            t_sent = title2[:] + sent1[:] + sent2[:]
+            sent2next_input_mask.append(len(t_sent))
+            for _ in range(20 - len(t_sent)):
+                t_sent.append('<pad>')
+        sent2next_sent.append(t_sent[:])
+        sent2next_sent3.append(start_sent3[:])
+        sent2next_sent3_target.append(end_sent3[:])
         sent2next.append([title2, sent1, sent2, start_sent3, end_sent3])
-
-    title2sent_output_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
-    sent2sent_input_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
-    sent2sent_output_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
-    sent2next_input_mask = [[512 for _ in range(10)] for batch in range(batch_size)]
-    sent2next_output_mask = [[512 for _ in range(5)] for batch in range(batch_size)]
+    #     print(len(sent2next_sent))
+    # print(np.array(sent2next_sent).shape)
+    # print(np.array(sent2next_sent))
 
     return {
         model.title2sent_title_holder: np.array(title2sent_title),
         model.title2sent_sent_holder: np.array(title2sent_sent),
         model.title2sent_sent_target_holder: np.array(title2sent_sent_target),
         model.title2sent_input_mask_holder: np.array(title2sent_input_mask),
-        model.title2sent_output_mask_holder: np.array(title2sent_output_mask),
         model.sent2sent_sent1_holder: np.array(sent2sent_sent1),
         model.sent2sent_sent2_holder: np.array(sent2sent_sent2),
         model.sent2sent_sent2_target_holder: np.array(sent2sent_sent2_target),
-        model.sent2sent_input_mask_holder: np.array(sent2sent_input_mask),
-        model.sent2sent_output_mask_holder: np.array(sent2sent_output_mask),
         model.sent2next_sent_holder: np.array(sent2next_sent),
         model.sent2next_sent3_holder: np.array(sent2next_sent3),
         model.sent2next_sent3_target_holder: np.array(sent2next_sent3_target),
-        model.sent2next_input_mask_holder: np.array(sent2next_input_mask),
-        model.sent2next_output_mask_holder: np.array(sent2next_output_mask)}, title2sent, sent2sent, sent2next
+        model.sent2next_input_mask_holder: np.array(sent2next_input_mask)}, title2sent, sent2sent, sent2next
 
